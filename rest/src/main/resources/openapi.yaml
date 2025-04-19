@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  contact:
+    name: Bernhard Wallisch
+    url: https://www.technikum-wien.at/personal/bernhard-wallisch/
+  title: Paperless REST-Server
+  version: 1.0.0
+servers:
+  - url: localhost:8081
+paths:
+  /api/documents/post_document:
+    post:
+      operationId: postDocument
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/postDocument_request'
+      responses:
+        "200":
+          description: Document successfully uploaded.
+        "400":
+          description: Document upload failed due to bad request!
+      summary: Upload a document
+      x-content-type: multipart/form-data
+      x-accepts:
+        - application/json
+  /api/documents:
+    get:
+      operationId: getDocuments
+      parameters:
+        - name: search
+          in: query
+          description: The search term for filtering documents
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/documents'
+          description: Success
+      summary: Return a list of documents
+      x-accepts:
+        - application/json
+  /api/documents/{id}:
+    delete:
+      operationId: deleteDocument
+      parameters:
+        - description: The id of the document
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      responses:
+        "204":
+          description: Document deleted successfully
+        "404":
+          description: Document does not exist with this id!
+      summary: Delete a document by id
+      x-accepts:
+        - application/json
+    get:
+      operationId: getDocument
+      parameters:
+        - description: The id of the document
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/document'
+          description: Success
+        "404":
+          description: Document does not exist with this id!
+      summary: Retrieve a document by id
+      x-accepts:
+        - application/json
+    put:
+      operationId: updateDocument
+      parameters:
+        - description: The id of the Document
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      responses:
+        "200":
+          description: Document updated successfully
+        "404":
+          description: Document does not exist with this id!
+      summary: Update a document by id
+      x-accepts:
+        - application/json
+components:
+  schemas:
+    document:
+      example:
+        author: author
+        created: created
+        id: 0
+        title: title
+      properties:
+        id:
+          description: The id of the document
+          type: integer
+        title:
+          description: The title of the document
+          type: string
+        author:
+          description: The author of the document's contents
+          type: string
+        created:
+          type: string
+      required:
+        - title
+    documents:
+      items:
+        $ref: '#/components/schemas/document'
+      type: array
+    postDocument_request:
+      properties:
+        document:
+          type: string
+        file:
+          format: binary
+          type: string
