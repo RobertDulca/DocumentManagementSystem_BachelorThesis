@@ -76,6 +76,23 @@ public class FileStorageImpl implements FileStorage {
             throw new RuntimeException(e);
         }
     }
+
+    @Override
+    public void delete(String objectName) {
+        try {
+            minioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(minIOConfig.getBucketName())
+                            .object(objectName)
+                            .build()
+            );
+            System.out.println("File deleted successfully: " + objectName);
+        } catch (Exception e) {
+            System.err.println("Error deleting file from MinIO: " + e.getMessage());
+            throw new RuntimeException("Failed to delete file: " + objectName, e);
+        }
+    }
+
 }
 
 

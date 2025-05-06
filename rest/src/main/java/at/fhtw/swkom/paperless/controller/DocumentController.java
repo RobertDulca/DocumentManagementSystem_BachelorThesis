@@ -7,6 +7,7 @@ import at.fhtw.swkom.paperless.services.ElasticsearchService;
 import at.fhtw.swkom.paperless.services.FileStorageImpl;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.exception.StorageFileNotFoundException;
+import at.fhtw.swkom.paperless.services.sage_orchestrator.DocumentSagaOrchestrator;
 import jakarta.annotation.Generated;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.logging.log4j.LogManager;
@@ -42,14 +43,16 @@ public class DocumentController implements ApiApi {
     private final RabbitTemplate rabbitTemplate;
     private final FileStorageImpl fileStorage;
     private final ElasticsearchService elasticsearchService;
+    private final DocumentSagaOrchestrator documentSagaOrchestrator;
 
     @Autowired
-    public DocumentController(NativeWebRequest request, DocumentService documentService, RabbitTemplate rabbitTemplate, FileStorageImpl fileStorage, ElasticsearchService elasticsearchService) {
+    public DocumentController(NativeWebRequest request, DocumentService documentService, RabbitTemplate rabbitTemplate, FileStorageImpl fileStorage, ElasticsearchService elasticsearchService, DocumentSagaOrchestrator documentSagaOrchestrator) {
         this.request = request;
         this.documentService = documentService;
         this.rabbitTemplate = rabbitTemplate;
         this.fileStorage = fileStorage;
         this.elasticsearchService = elasticsearchService;
+        this.documentSagaOrchestrator = documentSagaOrchestrator;
     }
 
     @Override
@@ -139,34 +142,8 @@ public class DocumentController implements ApiApi {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
 
-        Document documentEntity = Document.builder()
-                .title(documentTitle)
-                .createdAt(LocalDateTime.now())
-                .build();
-
         try {
-            // Save the document metadata to the database
-            logger.debug("Storing document in the database: {}", documentTitle);
-            documentEntity = documentService.store(documentEntity);
-
-            // Prepare file path for MinIO
-            String folderPath = "documents/" + documentEntity.getId() + "/";
-            String objectName = folderPath + file.getOriginalFilename();
-
-            // Upload the file to MinIO
-            logger.debug("Uploading file to MinIO: {}", objectName);
-            fileStorage.upload(objectName, file.getBytes());
-            logger.info("File successfully uploaded to MinIO at: {}", objectName);
-
-            // Send only headers to RabbitMQ
-            MessageProperties props = new MessageProperties();
-            props.setHeader("storagePath", objectName);
-            props.setHeader("documentId", documentEntity.getId());
-            Message rabbitMessage = new Message(new byte[0], props);
-
-            rabbitTemplate.send(RabbitMQConfig.OCR_QUEUE_NAME, rabbitMessage);
-            logger.info("Headers sent to RabbitMQ queue: {}", RabbitMQConfig.OCR_QUEUE_NAME);
-
+            documentSagaOrchestrator.startDocumentUpload(documentTitle, file);
             return new ResponseEntity<>(HttpStatus.CREATED);
 
         } catch (Exception e) {

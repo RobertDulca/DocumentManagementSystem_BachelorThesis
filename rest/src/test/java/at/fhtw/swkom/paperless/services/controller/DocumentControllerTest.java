@@ -7,6 +7,7 @@ import at.fhtw.swkom.paperless.services.ElasticsearchService;
 import at.fhtw.swkom.paperless.services.FileStorageImpl;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.exception.StorageFileNotFoundException;
+import at.fhtw.swkom.paperless.services.sage_orchestrator.DocumentSagaOrchestrator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -30,6 +31,7 @@ class DocumentControllerTest {
     private ElasticsearchService elasticsearchService;
     private FileStorageImpl fileStorage;
     private RabbitTemplate rabbitTemplate;
+    private DocumentSagaOrchestrator documentSagaOrchestrator;
 
     @BeforeEach
     void setUp() {
@@ -38,8 +40,9 @@ class DocumentControllerTest {
         fileStorage = mock(FileStorageImpl.class);
         rabbitTemplate = mock(RabbitTemplate.class);
         NativeWebRequest nativeWebRequest = mock(NativeWebRequest.class);
+        documentSagaOrchestrator = mock(DocumentSagaOrchestrator.class);
 
-        controller = new DocumentController(nativeWebRequest, documentService, rabbitTemplate, fileStorage, elasticsearchService);
+        controller = new DocumentController(nativeWebRequest, documentService, rabbitTemplate, fileStorage, elasticsearchService, documentSagaOrchestrator);
     }
 
     @Test

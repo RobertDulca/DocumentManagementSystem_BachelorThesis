@@ -58,32 +58,59 @@ public class TesseractOcrService implements OcrService {
 
             try (InputStream inputStream = new ByteArrayInputStream(fileBytes)) {
                 File tempFile = createTempFile(storagePath, inputStream);
-                String ocrResult = doOCR(tempFile);
+
+                String ocrResult;
+                try {
+                    ocrResult = doOCR(tempFile);
+                } catch (TesseractException e) {
+                    log.error("OCR failed for document {}", documentId);
+                    sendFailureMessage(documentId, "OCR failed");
+                    return; // Exit early: no ES index!
+                }
+
                 log.info("OCR Result: {}", ocrResult);
 
-                // Index the OCR result in Elasticsearch
+                // Index to ES only if OCR succeeded
                 indexDocumentInElasticsearch(documentId, ocrResult);
 
-                // Prepare headers for the new message
-                MessageProperties newMessageProperties = new MessageProperties();
-                newMessageProperties.setHeader("documentId", documentId);
+                // Send successful message
+                sendSuccessMessage(documentId, ocrResult);
 
-                // Create a new message with the OCR result and headers
-                org.springframework.amqp.core.Message newMessage = new org.springframework.amqp.core.Message(
-                        ocrResult.getBytes(),
-                        newMessageProperties
-                );
-
-                rabbit.send(RabbitMQConfig.RESULT_QUEUE_NAME, newMessage);
-                log.info("Message sent to RabbitMQ queue: {}", RabbitMQConfig.RESULT_QUEUE_NAME);
-
-            } catch (TesseractException | IOException e) {
-                log.error("Error during OCR process", e);
+            } catch (IOException e) {
+                log.error("Failed to process file for OCR", e);
+                sendFailureMessage(documentId, "File error during OCR");
             }
 
         } catch (Exception e) {
             log.error("Error processing message", e);
         }
+    }
+
+    private void sendSuccessMessage(Integer documentId, String ocrResult) {
+        MessageProperties newMessageProperties = new MessageProperties();
+        newMessageProperties.setHeader("documentId", documentId);
+        newMessageProperties.setHeader("ocrFailed", false);
+
+        org.springframework.amqp.core.Message newMessage = new org.springframework.amqp.core.Message(
+                ocrResult.getBytes(),
+                newMessageProperties
+        );
+        rabbit.send(RabbitMQConfig.RESULT_QUEUE_NAME, newMessage);
+        log.info("Success message sent to RESULT_QUEUE");
+    }
+
+    private void sendFailureMessage(Integer documentId, String reason) {
+        MessageProperties props = new MessageProperties();
+        props.setHeader("documentId", documentId);
+        props.setHeader("ocrFailed", true);
+        props.setHeader("failureReason", reason);
+
+        org.springframework.amqp.core.Message failureMessage = new org.springframework.amqp.core.Message(
+                new byte[0],
+                props
+        );
+        rabbit.send(RabbitMQConfig.RESULT_QUEUE_NAME, failureMessage);
+        log.warn("Failure message sent to RESULT_QUEUE for document {}: {}", documentId, reason);
     }
 
     public void indexDocumentInElasticsearch(Integer documentId, String content) {
