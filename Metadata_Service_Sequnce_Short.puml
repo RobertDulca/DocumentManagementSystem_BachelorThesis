@@ -1,0 +1,31 @@
+@startuml
+actor User
+participant "REST Controller" as REST
+participant "Saga Orchestrator" as Orchestrator
+participant "Database" as DB
+participant "MinIO" as Minio
+participant "RabbitMQ" as Queue
+participant "OCR Worker" as OCR
+participant "Metadata Enricher" as Enricher
+
+== Upload Request ==
+User -> REST : HTTP POST /documents
+REST -> Orchestrator : startDocumentUpload(title, file)
+
+
+
+== Receive OCR Result ==
+Queue -> Orchestrator : OCR_RESULT (documentId, text)
+Orchestrator -> DB : update(documentId, content)
+
+== Send Metadata Task ==
+Orchestrator -> Queue : publish ENRICH_JOB (documentId, text)
+Queue -> Enricher : deliver ENRICH_JOB
+Enricher -> Enricher : extract tags/summary
+Enricher -> Queue : publish ENRICH_RESULT (documentId, tags, summary)
+
+== Receive Metadata ==
+Queue -> Orchestrator : ENRICH_RESULT
+Orchestrator -> DB : update(documentId, tags, summary)
+
+@enduml
