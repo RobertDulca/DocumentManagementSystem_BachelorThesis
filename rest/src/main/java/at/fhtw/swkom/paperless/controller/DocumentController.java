@@ -2,10 +2,10 @@ package at.fhtw.swkom.paperless.controller;
 
 import at.fhtw.swkom.paperless.config.RabbitMQConfig;
 import at.fhtw.swkom.paperless.persistence.entities.Document;
-import at.fhtw.swkom.paperless.services.CircuitBreaker;
 import at.fhtw.swkom.paperless.services.DocumentService;
 import at.fhtw.swkom.paperless.services.ElasticsearchService;
 import at.fhtw.swkom.paperless.services.FileStorageImpl;
+import at.fhtw.swkom.paperless.services.circuit_breaker.CircuitBreaker;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.exception.StorageFileNotFoundException;
 import jakarta.annotation.Generated;
@@ -43,7 +43,7 @@ public class DocumentController implements ApiApi {
     private final RabbitTemplate rabbitTemplate;
     private final FileStorageImpl fileStorage;
     private final ElasticsearchService elasticsearchService;
-    private final CircuitBreaker circuitBreaker = new CircuitBreaker(3, 2, 10000);
+    private final CircuitBreaker circuitBreaker = new CircuitBreaker();
 
 
     @Autowired
@@ -147,6 +147,10 @@ public class DocumentController implements ApiApi {
                 .createdAt(LocalDateTime.now())
                 .build();
 
+        if (!circuitBreaker.allowRequest()) {
+            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
         try {
             // Save the document metadata to the database
             logger.debug("Storing document in the database: {}", documentTitle);
@@ -167,17 +171,14 @@ public class DocumentController implements ApiApi {
             props.setHeader("documentId", documentEntity.getId());
             Message rabbitMessage = new Message(new byte[0], props);
 
-            circuitBreaker.call(
-                    () -> {
-                        rabbitTemplate.send(RabbitMQConfig.OCR_QUEUE_NAME, rabbitMessage);
-                        logger.info("Headers sent to RabbitMQ queue: {}", RabbitMQConfig.OCR_QUEUE_NAME);
-                        return null;
-                    },
-                    () -> {
-                        logger.warn("Circuit is OPEN – skipping OCR message send.");
-                        throw new IllegalStateException("OCR temporarily unavailable – circuit is open");
-                    }
-            );
+            try {
+                rabbitTemplate.send(RabbitMQConfig.OCR_QUEUE_NAME, rabbitMessage);
+                logger.info("Headers sent to RabbitMQ queue: {}", RabbitMQConfig.OCR_QUEUE_NAME);
+                circuitBreaker.recordSuccess();
+            } catch (Exception e) {
+                circuitBreaker.recordFailure();
+                return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            }
 
             return new ResponseEntity<>(HttpStatus.CREATED);
 
