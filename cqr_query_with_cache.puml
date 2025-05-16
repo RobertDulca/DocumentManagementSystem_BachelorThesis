@@ -1,0 +1,21 @@
+@startuml
+actor User
+participant "DocumentController" as Controller
+participant "DocumentQueryService" as QueryService
+participant "Cache" as Cache
+participant "Elasticsearch" as Elasticsearch
+
+User -> Controller : GET /documents/{id}
+Controller -> QueryService : load(id)
+QueryService -> Cache : get(id)
+alt Cache hit
+    Cache --> QueryService : return DocumentDTO
+else Cache miss
+    Cache --> QueryService : null
+    QueryService -> Elasticsearch : fetch document
+    Elasticsearch --> QueryService : DocumentDTO
+    QueryService -> Cache : put(id, DocumentDTO)
+end
+QueryService --> Controller : DocumentDTO
+Controller --> User : HTTP 200 + JSON
+@enduml
