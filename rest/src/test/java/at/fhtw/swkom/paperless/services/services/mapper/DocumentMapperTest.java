@@ -3,7 +3,6 @@ package at.fhtw.swkom.paperless.services.services.mapper;
 import at.fhtw.swkom.paperless.controller.DocumentController;
 import at.fhtw.swkom.paperless.persistence.entities.Document;
 import at.fhtw.swkom.paperless.persistence.repositories.DocumentRepository;
-import at.fhtw.swkom.paperless.services.DocumentServiceImpl;
 import at.fhtw.swkom.paperless.services.ElasticsearchService;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.mappers.DocumentMapper;
@@ -20,9 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 @DataJpaTest
 @TestPropertySource("/application-test.properties")
 class DocumentMapperTest {
-
-    @MockBean
-    DocumentServiceImpl service;
 
     @MockBean
     DocumentRepository repository;

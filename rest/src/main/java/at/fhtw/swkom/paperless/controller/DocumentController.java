@@ -2,9 +2,7 @@ package at.fhtw.swkom.paperless.controller;
 
 import at.fhtw.swkom.paperless.config.RabbitMQConfig;
 import at.fhtw.swkom.paperless.persistence.entities.Document;
-import at.fhtw.swkom.paperless.services.DocumentService;
-import at.fhtw.swkom.paperless.services.ElasticsearchService;
-import at.fhtw.swkom.paperless.services.FileStorageImpl;
+import at.fhtw.swkom.paperless.services.*;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.exception.StorageFileNotFoundException;
 import jakarta.annotation.Generated;
@@ -38,15 +36,17 @@ public class DocumentController implements ApiApi {
     private static final Logger logger = LogManager.getLogger(DocumentController.class);
 
     private final NativeWebRequest request;
-    private final DocumentService documentService;
+    private final DocumentCommandService documentCommandService;
+    private final DocumentQueryService documentQueryService;
     private final RabbitTemplate rabbitTemplate;
     private final FileStorageImpl fileStorage;
     private final ElasticsearchService elasticsearchService;
 
     @Autowired
-    public DocumentController(NativeWebRequest request, DocumentService documentService, RabbitTemplate rabbitTemplate, FileStorageImpl fileStorage, ElasticsearchService elasticsearchService) {
+    public DocumentController(NativeWebRequest request, DocumentCommandService documentCommandService, DocumentQueryService documentQueryService, RabbitTemplate rabbitTemplate, FileStorageImpl fileStorage, ElasticsearchService elasticsearchService) {
         this.request = request;
-        this.documentService = documentService;
+        this.documentCommandService = documentCommandService;
+        this.documentQueryService = documentQueryService;
         this.rabbitTemplate = rabbitTemplate;
         this.fileStorage = fileStorage;
         this.elasticsearchService = elasticsearchService;
@@ -61,7 +61,7 @@ public class DocumentController implements ApiApi {
     public ResponseEntity<Void> deleteDocument(Integer id) {
         logger.info("Received request to delete document with ID: {}", id);
         try {
-            documentService.delete(id);
+            documentCommandService.delete(id);
             elasticsearchService.deleteDocumentById(id);
             logger.info("Successfully deleted document with ID: {}", id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -75,7 +75,7 @@ public class DocumentController implements ApiApi {
     public ResponseEntity<DocumentDTO> getDocument(Integer id) {
         logger.info("Received request to fetch document with ID: {}", id);
         try {
-            DocumentDTO document = documentService.load(id);
+            DocumentDTO document = documentQueryService.load(id);
             logger.info("Successfully fetched document with ID: {}", id);
             return new ResponseEntity<>(document, HttpStatus.OK);
         } catch (Exception e) {
@@ -104,7 +104,7 @@ public class DocumentController implements ApiApi {
                 logger.info("Successfully found {} documents for search term: {}", results.size(), search);
 
                 for (DocumentDTO result : results) {
-                    Optional<DocumentDTO> document = Optional.ofNullable(documentService.load(result.getId()));
+                    Optional<DocumentDTO> document = Optional.ofNullable(documentQueryService.load(result.getId()));
                     document.ifPresent(combinedResults::add);
                 }
 
@@ -113,7 +113,7 @@ public class DocumentController implements ApiApi {
 
             // If no search term, fetch all documents
             logger.info("Fetching all documents");
-            List<DocumentDTO> documents = documentService.loadAll();
+            List<DocumentDTO> documents = documentQueryService.loadAll();
 
             if (documents.isEmpty()) {
                 logger.info("No documents found");
@@ -147,7 +147,7 @@ public class DocumentController implements ApiApi {
         try {
             // Save the document metadata to the database
             logger.debug("Storing document in the database: {}", documentTitle);
-            documentEntity = documentService.store(documentEntity);
+            documentEntity = documentCommandService.store(documentEntity);
 
             // Prepare file path for MinIO
             String folderPath = "documents/" + documentEntity.getId() + "/";
@@ -182,7 +182,7 @@ public class DocumentController implements ApiApi {
         logger.info("Received request to update document with ID: {}", id);
         try {
             DocumentDTO documentDTO = new DocumentDTO();
-            documentService.update(id, documentDTO);
+            documentCommandService.update(id, documentDTO);
             logger.info("Successfully updated document with ID: {}", id);
             return new ResponseEntity<>(HttpStatus.CREATED);
         } catch (Exception e) {

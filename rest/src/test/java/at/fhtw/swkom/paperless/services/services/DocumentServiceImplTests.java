@@ -2,7 +2,8 @@ package at.fhtw.swkom.paperless.services.services;
 
 import at.fhtw.swkom.paperless.persistence.entities.Document;
 import at.fhtw.swkom.paperless.persistence.repositories.DocumentRepository;
-import at.fhtw.swkom.paperless.services.DocumentServiceImpl;
+import at.fhtw.swkom.paperless.services.DocumentCommandService;
+import at.fhtw.swkom.paperless.services.DocumentQueryService;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.exception.StorageException;
 import at.fhtw.swkom.paperless.services.mappers.DocumentMapper;
@@ -22,27 +23,28 @@ class DocumentServiceImplTests {
 
     private DocumentRepository documentRepository;
     private DocumentMapper documentMapper;
-    private DocumentServiceImpl documentService;
+
+    private DocumentCommandService commandService;
+    private DocumentQueryService queryService;
 
     @BeforeEach
     void setUp() {
         documentRepository = mock(DocumentRepository.class);
         documentMapper = mock(DocumentMapper.class);
-        documentService = new DocumentServiceImpl(documentRepository, documentMapper);
+
+        commandService = new DocumentCommandService(documentRepository, documentMapper);
+        queryService = new DocumentQueryService(documentRepository, documentMapper);
     }
 
     @Test
     void testStoreSavesDocument() {
-        // Arrange
         Document document = new Document();
         document.setTitle("Test Document");
 
         when(documentRepository.save(document)).thenReturn(document);
 
-        // Act
-        Document savedDocument = documentService.store(document);
+        Document savedDocument = commandService.store(document);
 
-        // Assert
         assertNotNull(savedDocument);
         assertEquals("Test Document", savedDocument.getTitle());
         verify(documentRepository, times(1)).save(document);
@@ -50,92 +52,101 @@ class DocumentServiceImplTests {
 
     @Test
     void testStoreThrowsExceptionForNullDocument() {
-        // Act & Assert
-        StorageException exception = assertThrows(StorageException.class, () -> documentService.store(null));
+        StorageException exception = assertThrows(StorageException.class, () -> commandService.store(null));
         assertEquals("No documentEntity found!", exception.getMessage());
     }
 
     @Test
     void testLoadAllReturnsAllDocuments() {
-        // Arrange
-        Document document1 = new Document();
-        document1.setId(1);
-        document1.setTitle("Document 1");
+        Document doc1 = new Document();
+        doc1.setId(1);
+        doc1.setTitle("Doc 1");
 
-        Document document2 = new Document();
-        document2.setId(2);
-        document2.setTitle("Document 2");
+        Document doc2 = new Document();
+        doc2.setId(2);
+        doc2.setTitle("Doc 2");
 
-        DocumentDTO documentDTO1 = new DocumentDTO(1, "Document 1", LocalDateTime.now(), null);
-        DocumentDTO documentDTO2 = new DocumentDTO(2, "Document 2", LocalDateTime.now(), null);
+        DocumentDTO dto1 = new DocumentDTO(1, "Doc 1", LocalDateTime.now(), null);
+        DocumentDTO dto2 = new DocumentDTO(2, "Doc 2", LocalDateTime.now(), null);
 
-        when(documentRepository.findAll()).thenReturn(Arrays.asList(document1, document2));
-        when(documentMapper.entityToDto(document1)).thenReturn(documentDTO1);
-        when(documentMapper.entityToDto(document2)).thenReturn(documentDTO2);
+        when(documentRepository.findAll()).thenReturn(Arrays.asList(doc1, doc2));
+        when(documentMapper.entityToDto(doc1)).thenReturn(dto1);
+        when(documentMapper.entityToDto(doc2)).thenReturn(dto2);
 
-        // Act
-        List<DocumentDTO> documents = documentService.loadAll();
+        List<DocumentDTO> result = queryService.loadAll();
 
-        // Assert
-        assertEquals(2, documents.size());
-        verify(documentRepository, times(1)).findAll();
+        assertEquals(2, result.size());
+        verify(documentRepository).findAll();
         verify(documentMapper, times(2)).entityToDto(any(Document.class));
     }
 
     @Test
-    void testDeleteDeletesDocumentForValidId() {
-        // Arrange
+    void testLoadThrowsExceptionIfDocumentNotFound() {
+        when(documentRepository.findById(1)).thenReturn(Optional.empty());
+        assertThrows(EntityNotFoundException.class, () -> queryService.load(1));
+    }
+
+    @Test
+    void testLoadReturnsDocument() {
+        Document doc = new Document();
+        doc.setId(1);
+        doc.setTitle("Doc");
+
+        DocumentDTO dto = new DocumentDTO(1, "Doc", LocalDateTime.now(), null);
+
+        when(documentRepository.findById(1)).thenReturn(Optional.of(doc));
+        when(documentMapper.entityToDto(doc)).thenReturn(dto);
+
+        DocumentDTO result = queryService.load(1);
+
+        assertEquals("Doc", result.getTitle());
+        verify(documentRepository).findById(1);
+    }
+
+    @Test
+    void testDeleteDeletesDocument() {
         when(documentRepository.existsById(1)).thenReturn(true);
 
-        // Act
-        documentService.delete(1);
+        commandService.delete(1);
 
-        // Assert
-        verify(documentRepository, times(1)).deleteById(1);
+        verify(documentRepository).deleteById(1);
     }
 
     @Test
     void testDeleteThrowsExceptionForInvalidId() {
-        // Arrange
         when(documentRepository.existsById(1)).thenReturn(false);
 
-        // Act & Assert
-        EntityNotFoundException exception = assertThrows(EntityNotFoundException.class, () -> documentService.delete(1));
+        EntityNotFoundException exception = assertThrows(EntityNotFoundException.class, () -> commandService.delete(1));
         assertEquals("Document with ID 1 not found for deletion", exception.getMessage());
     }
 
     @Test
     void testUpdateUpdatesDocument() {
-        // Arrange
-        Document existingDocument = new Document();
-        existingDocument.setId(1);
-        existingDocument.setTitle("Old Title");
+        Document existing = new Document();
+        existing.setId(1);
+        existing.setTitle("Old Title");
 
-        DocumentDTO updatedDTO = new DocumentDTO(1, "New Title", LocalDateTime.now(), null);
+        DocumentDTO dto = new DocumentDTO(1, "New Title", LocalDateTime.now(), null);
 
-        Document updatedDocument = new Document();
-        updatedDocument.setId(1);
-        updatedDocument.setTitle("New Title");
+        Document mapped = new Document();
+        mapped.setId(1);
+        mapped.setTitle("New Title");
 
-        when(documentRepository.findById(1)).thenReturn(Optional.of(existingDocument));
-        when(documentMapper.dtoToEntity(updatedDTO)).thenReturn(updatedDocument);
+        when(documentRepository.findById(1)).thenReturn(Optional.of(existing));
+        when(documentMapper.dtoToEntity(dto)).thenReturn(mapped);
 
-        // Act
-        documentService.update(1, updatedDTO);
+        commandService.update(1, dto);
 
-        // Assert
-        verify(documentRepository, times(1)).save(updatedDocument);
+        verify(documentRepository).save(mapped);
     }
 
     @Test
     void testUpdateThrowsExceptionForInvalidId() {
-        // Arrange
         when(documentRepository.findById(1)).thenReturn(Optional.empty());
 
-        DocumentDTO updatedDTO = new DocumentDTO(1, "New Title", LocalDateTime.now(), null);
+        DocumentDTO dto = new DocumentDTO(1, "New Title", LocalDateTime.now(), null);
 
-        // Act & Assert
-        EntityNotFoundException exception = assertThrows(EntityNotFoundException.class, () -> documentService.update(1, updatedDTO));
+        EntityNotFoundException exception = assertThrows(EntityNotFoundException.class, () -> commandService.update(1, dto));
         assertEquals("Document with ID 1 not found for update", exception.getMessage());
     }
 }

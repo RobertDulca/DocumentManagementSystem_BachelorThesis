@@ -22,12 +22,14 @@ import java.util.Optional;
 @Slf4j
 public class ResultQueueContentService {
     private final RabbitTemplate rabbit;
-    private final DocumentService documentService;
+    private final DocumentQueryService documentQueryService;
+    private final DocumentCommandService documentCommandService;
 
     @Autowired
-    public ResultQueueContentService(RabbitTemplate rabbit, DocumentService documentService) {
+    public ResultQueueContentService(RabbitTemplate rabbit, DocumentQueryService documentQueryService, DocumentCommandService documentCommandService) {
         this.rabbit = rabbit;
-        this.documentService = documentService;
+        this.documentQueryService = documentQueryService;
+        this.documentCommandService = documentCommandService;
     }
 
     @RabbitListener(queues = RabbitMQConfig.RESULT_QUEUE_NAME)
@@ -44,7 +46,7 @@ public class ResultQueueContentService {
             String ocrContent = new String(message.getBody());
 
             // Retrieve the document by ID from the database
-            DocumentDTO documentDTO = documentService.load(documentId);
+            DocumentDTO documentDTO = documentQueryService.load(documentId);
 
             if (documentDTO != null) {
                 log.info("ocrContent: {}", ocrContent);
@@ -57,7 +59,7 @@ public class ResultQueueContentService {
                 documentDTO.setContent(truncatedContent);
 
                 // Save the updated document
-                documentService.update(documentId, documentDTO);
+                documentCommandService.update(documentId, documentDTO);
 
                 log.info("Successfully updated document ID {} with OCR content.", documentId);
             } else {

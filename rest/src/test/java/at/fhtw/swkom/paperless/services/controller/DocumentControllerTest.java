@@ -2,9 +2,7 @@ package at.fhtw.swkom.paperless.services.controller;
 
 import at.fhtw.swkom.paperless.controller.DocumentController;
 import at.fhtw.swkom.paperless.persistence.entities.Document;
-import at.fhtw.swkom.paperless.services.DocumentService;
-import at.fhtw.swkom.paperless.services.ElasticsearchService;
-import at.fhtw.swkom.paperless.services.FileStorageImpl;
+import at.fhtw.swkom.paperless.services.*;
 import at.fhtw.swkom.paperless.services.dto.DocumentDTO;
 import at.fhtw.swkom.paperless.services.exception.StorageFileNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,66 +24,68 @@ import static org.mockito.Mockito.*;
 class DocumentControllerTest {
 
     private DocumentController controller;
-    private DocumentService documentService;
+    private DocumentCommandService documentCommandService;
+    private DocumentQueryService documentQueryService;
     private ElasticsearchService elasticsearchService;
     private FileStorageImpl fileStorage;
     private RabbitTemplate rabbitTemplate;
 
     @BeforeEach
     void setUp() {
-        documentService = mock(DocumentService.class);
+        documentCommandService = mock(DocumentCommandService.class);
+        documentQueryService = mock(DocumentQueryService.class);
         elasticsearchService = mock(ElasticsearchService.class);
         fileStorage = mock(FileStorageImpl.class);
         rabbitTemplate = mock(RabbitTemplate.class);
         NativeWebRequest nativeWebRequest = mock(NativeWebRequest.class);
 
-        controller = new DocumentController(nativeWebRequest, documentService, rabbitTemplate, fileStorage, elasticsearchService);
+        controller = new DocumentController(nativeWebRequest, documentCommandService, documentQueryService, rabbitTemplate, fileStorage, elasticsearchService);
     }
 
     @Test
     void testDeleteDocument_Success() {
         int documentId = 1;
-        doNothing().when(documentService).delete(documentId);
+        doNothing().when(documentCommandService).delete(documentId);
 
         ResponseEntity<Void> response = controller.deleteDocument(documentId);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(documentService).delete(documentId);
+        verify(documentCommandService).delete(documentId);
     }
 
     @Test
     void testDeleteDocument_Exception() {
         int documentId = 1;
-        doThrow(new RuntimeException("Test exception")).when(documentService).delete(documentId);
+        doThrow(new RuntimeException("Test exception")).when(documentCommandService).delete(documentId);
 
         ResponseEntity<Void> response = controller.deleteDocument(documentId);
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        verify(documentService).delete(documentId);
+        verify(documentCommandService).delete(documentId);
     }
 
     @Test
     void testGetDocument_Success() {
         int documentId = 1;
         DocumentDTO mockDocument = new DocumentDTO();
-        when(documentService.load(documentId)).thenReturn(mockDocument);
+        when(documentQueryService.load(documentId)).thenReturn(mockDocument);
 
         ResponseEntity<DocumentDTO> response = controller.getDocument(documentId);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(mockDocument, response.getBody());
-        verify(documentService).load(documentId);
+        verify(documentQueryService).load(documentId);
     }
 
     @Test
     void testGetDocument_Exception() {
         int documentId = 1;
-        when(documentService.load(documentId)).thenThrow(new RuntimeException("Test exception"));
+        when(documentQueryService.load(documentId)).thenThrow(new RuntimeException("Test exception"));
 
         ResponseEntity<DocumentDTO> response = controller.getDocument(documentId);
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        verify(documentService).load(documentId);
+        verify(documentQueryService).load(documentId);
     }
 
     @Test
@@ -94,24 +94,24 @@ class DocumentControllerTest {
         DocumentDTO mockDocument = new DocumentDTO();
         mockDocument.setId(1);
         when(elasticsearchService.searchDocuments(searchTerm)).thenReturn(List.of(mockDocument));
-        when(documentService.load(mockDocument.getId())).thenReturn(mockDocument);
+        when(documentQueryService.load(mockDocument.getId())).thenReturn(mockDocument);
 
         ResponseEntity<List<DocumentDTO>> response = controller.getDocuments(searchTerm);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1, Objects.requireNonNull(response.getBody()).size());
         verify(elasticsearchService).searchDocuments(searchTerm);
-        verify(documentService).load(mockDocument.getId());
+        verify(documentQueryService).load(mockDocument.getId());
     }
 
     @Test
     void testGetDocuments_NoSearchTerm() {
-        when(documentService.loadAll()).thenReturn(List.of());
+        when(documentQueryService.loadAll()).thenReturn(List.of());
 
         ResponseEntity<List<DocumentDTO>> response = controller.getDocuments(null);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(documentService).loadAll();
+        verify(documentQueryService).loadAll();
     }
 
     @Test
@@ -123,7 +123,7 @@ class DocumentControllerTest {
                 .title(documentTitle)
                 .createdAt(LocalDateTime.now())
                 .build();
-        when(documentService.store(any())).thenReturn(mockDocument);
+        when(documentCommandService.store(any())).thenReturn(mockDocument);
 
         ResponseEntity<Void> response = controller.postDocument(documentTitle, file);
 
@@ -142,23 +142,23 @@ class DocumentControllerTest {
     @Test
     void testUpdateDocument_Success() {
         int documentId = 1;
-        doNothing().when(documentService).update(eq(documentId), any());
+        doNothing().when(documentCommandService).update(eq(documentId), any());
 
         ResponseEntity<Void> response = controller.updateDocument(documentId);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        verify(documentService).update(eq(documentId), any());
+        verify(documentCommandService).update(eq(documentId), any());
     }
 
     @Test
     void testUpdateDocument_Exception() {
         int documentId = 1;
-        doThrow(new RuntimeException("Test exception")).when(documentService).update(eq(documentId), any());
+        doThrow(new RuntimeException("Test exception")).when(documentCommandService).update(eq(documentId), any());
 
         ResponseEntity<Void> response = controller.updateDocument(documentId);
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        verify(documentService).update(eq(documentId), any());
+        verify(documentCommandService).update(eq(documentId), any());
     }
 
     @Test
